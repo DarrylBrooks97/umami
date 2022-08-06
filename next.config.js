@@ -3,12 +3,13 @@ const pkg = require('./package.json');
 
 module.exports = {
   env: {
-    VERSION: pkg.version,
-    FORCE_SSL: !!process.env.FORCE_SSL,
-    DISABLE_LOGIN: !!process.env.DISABLE_LOGIN,
-    TRACKER_SCRIPT_NAME: process.env.TRACKER_SCRIPT_NAME,
+    currentVersion: pkg.version,
+    loginDisabled: process.env.DISABLE_LOGIN,
+    updatesDisabled: process.env.DISABLE_UPDATES,
+    telemetryDisabled: process.env.DISABLE_TELEMETRY,
   },
   basePath: process.env.BASE_PATH,
+  output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -24,7 +25,7 @@ module.exports = {
   async headers() {
     return [
       {
-        source: '/umami.js',
+        source: `/(.*\\.js)`,
         headers: [
           {
             key: 'Cache-Control',

@@ -9,20 +9,21 @@ import MenuLayout from 'components/layout/MenuLayout';
 import Link from 'components/common/Link';
 import Loading from 'components/common/Loading';
 import Arrow from 'assets/arrow-right.svg';
-import styles from './WebsiteDetails.module.css';
-import PagesTable from '../metrics/PagesTable';
-import ReferrersTable from '../metrics/ReferrersTable';
-import BrowsersTable from '../metrics/BrowsersTable';
-import OSTable from '../metrics/OSTable';
-import DevicesTable from '../metrics/DevicesTable';
-import CountriesTable from '../metrics/CountriesTable';
-import LanguagesTable from '../metrics/LanguagesTable';
-import EventsTable from '../metrics/EventsTable';
-import EventsChart from '../metrics/EventsChart';
+import PagesTable from 'components/metrics/PagesTable';
+import ReferrersTable from 'components/metrics/ReferrersTable';
+import BrowsersTable from 'components/metrics/BrowsersTable';
+import OSTable from 'components/metrics/OSTable';
+import DevicesTable from 'components/metrics/DevicesTable';
+import CountriesTable from 'components/metrics/CountriesTable';
+import LanguagesTable from 'components/metrics/LanguagesTable';
+import EventsTable from 'components/metrics/EventsTable';
+import EventsChart from 'components/metrics/EventsChart';
 import useFetch from 'hooks/useFetch';
 import usePageQuery from 'hooks/usePageQuery';
-import useShareToken from 'hooks/useShareToken';
-import { DEFAULT_ANIMATION_DURATION, TOKEN_HEADER } from 'lib/constants';
+import { DEFAULT_ANIMATION_DURATION } from 'lib/constants';
+import styles from './WebsiteDetails.module.css';
+import ScreenTable from 'components/metrics/ScreenTable';
+import UTMTable from 'components/metrics/UTMTable';
 
 const views = {
   url: PagesTable,
@@ -30,16 +31,15 @@ const views = {
   browser: BrowsersTable,
   os: OSTable,
   device: DevicesTable,
+  screen: ScreenTable,
   country: CountriesTable,
   language: LanguagesTable,
   event: EventsTable,
+  utm: UTMTable,
 };
 
 export default function WebsiteDetails({ websiteId }) {
-  const shareToken = useShareToken();
-  const { data } = useFetch(`/api/website/${websiteId}`, {
-    headers: { [TOKEN_HEADER]: shareToken?.token },
-  });
+  const { data } = useFetch(`/website/${websiteId}`);
   const [chartLoaded, setChartLoaded] = useState(false);
   const [countryData, setCountryData] = useState();
   const [eventsData, setEventsData] = useState();
@@ -69,6 +69,10 @@ export default function WebsiteDetails({ websiteId }) {
       value: resolve({ view: 'referrer' }),
     },
     {
+      label: <FormattedMessage id="metrics.screens" defaultMessage="Screens" />,
+      value: resolve({ view: 'screen' }),
+    },
+    {
       label: <FormattedMessage id="metrics.browsers" defaultMessage="Browsers" />,
       value: resolve({ view: 'browser' }),
     },
@@ -91,6 +95,10 @@ export default function WebsiteDetails({ websiteId }) {
     {
       label: <FormattedMessage id="metrics.events" defaultMessage="Events" />,
       value: resolve({ view: 'event' }),
+    },
+    {
+      label: <FormattedMessage id="metrics.utm" defaultMessage="UTM" />,
+      value: resolve({ view: 'utm' }),
     },
   ];
 

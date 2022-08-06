@@ -7,7 +7,6 @@ import { removeTrailingSlash } from '../lib/url';
     navigator: { language },
     location: { hostname, pathname, search },
     localStorage,
-    sessionStorage,
     document,
     history,
   } = window;
@@ -21,15 +20,14 @@ import { removeTrailingSlash } from '../lib/url';
   const hostUrl = attr('data-host-url');
   const autoTrack = attr('data-auto-track') !== 'false';
   const dnt = attr('data-do-not-track');
-  const useCache = attr('data-cache');
+  const cssEvents = attr('data-css-events') !== 'false';
   const domain = attr('data-domains') || '';
   const domains = domain.split(',').map(n => n.trim());
 
   const eventClass = /^umami--([a-z]+)--([\w]+[\w-]*)$/;
   const eventSelect = "[class*='umami--']";
-  const cacheKey = 'umami.cache';
 
-  const disableTracking = () =>
+  const trackingDisabled = () =>
     (localStorage && localStorage.getItem('umami.disabled')) ||
     (dnt && doNotTrack()) ||
     (domain && !domains.includes(hostname));
@@ -41,72 +39,78 @@ import { removeTrailingSlash } from '../lib/url';
   const listeners = {};
   let currentUrl = `${pathname}${search}`;
   let currentRef = document.referrer;
+  let cache;
 
   /* Collect metrics */
 
-  const post = (url, data, callback) => {
-    const req = new XMLHttpRequest();
-    req.open('POST', url, true);
-    req.setRequestHeader('Content-Type', 'application/json');
+  const getPayload = () => ({
+    website,
+    hostname,
+    screen,
+    language,
+    url: currentUrl,
+  });
 
-    req.onreadystatechange = () => {
-      if (req.readyState === 4) {
-        callback(req.response);
-      }
-    };
-
-    req.send(JSON.stringify(data));
+  const assign = (a, b) => {
+    Object.keys(b).forEach(key => {
+      a[key] = b[key];
+    });
+    return a;
   };
 
-  const collect = (type, params, uuid) => {
-    if (disableTracking()) return;
-
-    const payload = {
-      website: uuid,
-      hostname,
-      screen,
-      language,
-      cache: useCache && sessionStorage.getItem(cacheKey),
+  const collect = (type, payload, persist = false) => {
+    if (trackingDisabled()) return;
+    const endpoint = `${root}/api/collect`;
+    let headers = { 'Content-Type': 'application/json' };
+    if (cache) headers['x-umami-cache'] = cache;
+    let options = {
+      method: 'POST',
+      body: JSON.stringify({type, payload}),
+      headers
     };
-
-    Object.keys(params).forEach(key => {
-      payload[key] = params[key];
-    });
-
-    post(
-      `${root}/api/collect`,
-      {
-        type,
-        payload,
-      },
-      res => useCache && sessionStorage.setItem(cacheKey, res),
-    );
+    if (!persist) {
+      fetch(endpoint, options).then(res => res.text()).then(resText => { cache = resText });
+    } else {
+      options['keepalive'] = true;
+      fetch(endpoint, options);
+    }
   };
 
   const trackView = (url = currentUrl, referrer = currentRef, uuid = website) => {
     collect(
       'pageview',
-      {
+      assign(getPayload(), {
+        website: uuid,
         url,
         referrer,
-      },
-      uuid,
+      })
     );
   };
 
   const trackEvent = (event_value, event_type = 'custom', url = currentUrl, uuid = website) => {
     collect(
       'event',
-      {
+      assign(getPayload(), {
+        website: uuid,
+        url,
         event_type,
         event_value,
-        url,
-      },
-      uuid,
+      })
     );
   };
 
   /* Handle events */
+
+  const sendEvent = (event_value, event_type) => {
+    collect(
+      'event',
+      assign(getPayload(), {
+        event_type,
+        event_value,
+      }),
+      true
+    );
+  };
 
   const addEvents = node => {
     const elements = node.querySelectorAll(eventSelect);
@@ -120,17 +124,15 @@ import { removeTrailingSlash } from '../lib/url';
       const [, type, value] = className.split('--');
       const listener = listeners[className]
         ? listeners[className]
-        : (listeners[className] = () => trackEvent(value, type));
+        : (listeners[className] = () => {
+            if (element.tagName === 'A') {
+              sendEvent(value, type);
+            } else {
+              trackEvent(value, type);
+            }
+          });
 
       element.addEventListener(type, listener, true);
-    });
-  };
-
-  const monitorMutate = mutations => {
-    mutations.forEach(mutation => {
-      const element = mutation.target;
-      addEvent(element);
-      addEvents(element);
     });
   };
 
@@ -153,6 +155,19 @@ import { removeTrailingSlash } from '../lib/url';
     }
   };
 
+  const observeDocument = () => {
+    const monitorMutate = mutations => {
+      mutations.forEach(mutation => {
+        const element = mutation.target;
+        addEvent(element);
+        addEvents(element);
+      });
+    };
+
+    const observer = new MutationObserver(monitorMutate);
+    observer.observe(document, { childList: true, subtree: true });
+  };
+
   /* Global */
 
   if (!window.umami) {
@@ -165,20 +180,23 @@ import { removeTrailingSlash } from '../lib/url';
 
   /* Start */
 
-  if (autoTrack && !disableTracking()) {
+  if (autoTrack && !trackingDisabled()) {
     history.pushState = hook(history, 'pushState', handlePush);
     history.replaceState = hook(history, 'replaceState', handlePush);
 
     const update = () => {
       if (document.readyState === 'complete') {
-        addEvents(document);
         trackView();
 
-        const observer = new MutationObserver(monitorMutate);
-        observer.observe(document, { childList: true, subtree: true });
+        if (cssEvents) {
+          addEvents(document);
+          observeDocument();
+        }
       }
     };
+
     document.addEventListener('readystatechange', update, true);
+
     update();
   }
 })(window);
